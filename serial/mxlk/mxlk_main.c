@@ -9,13 +9,11 @@
  ******************************************************************************/
 
 #include "mxlk.h"
-#include "mxlk_pci.h"
 #include "mxlk_char.h"
 #include "mxlk_core.h"
-#include "mxlk_print.h"
 
 static const struct pci_device_id mxlk_pci_table[] = {
-    {PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x6200), 0},
+    {PCI_DEVICE(PCI_VENDOR_ID_INTEL, MX_PCI_DEVICE_ID), 0},
     {0}
 };
 
@@ -27,11 +25,11 @@ static int mxlk_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
     struct mxlk *mxlk = kzalloc(sizeof(*mxlk), GFP_KERNEL);
 
     if (!mxlk) {
-        mxlk_error("failed to allocate mxlk for device %s\n", pci_name(pdev));
+        mx_err("failed to allocate mxlk for device %s\n", pci_name(pdev));
         return -ENOMEM;
     }
 
-    mxlk_debug("mxlk : %px\n", mxlk);
+    mx_dbg("mxlk : %px\n", mxlk);
     error = mxlk_core_init(mxlk, pdev, mxlk_wq);
     if (error) {
         goto error_core;
@@ -55,17 +53,17 @@ static void mxlk_remove(struct pci_dev *pdev)
 
 static struct pci_driver mxlk_driver =
 {
-    .name 		= MXLK_DRIVER_NAME,
-    .id_table 	= mxlk_pci_table,
-    .probe 		= mxlk_probe,
-    .remove 	= mxlk_remove
+    .name       = MXLK_DRIVER_NAME,
+    .id_table   = mxlk_pci_table,
+    .probe      = mxlk_probe,
+    .remove     = mxlk_remove
 };
 
 static int __init mxlk_init_module(void)
 {
     mxlk_wq = alloc_workqueue(MXLK_DRIVER_NAME, WQ_MEM_RECLAIM, 0);
     if (!mxlk_wq) {
-        mxlk_error("failed to allocate workqueue\n");
+        mx_err("failed to allocate workqueue\n");
         return -ENOMEM;
     }
 
@@ -76,7 +74,7 @@ static int __init mxlk_init_module(void)
 
 static void __exit mxlk_exit_module(void)
 {
-    mxlk_debug(" Exiting driver ...\n");
+    mx_dbg(" Exiting driver ...\n");
     pci_unregister_driver(&mxlk_driver);
     mxlk_chrdev_exit();
 }

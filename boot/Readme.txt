@@ -13,12 +13,6 @@ This is the PCIe Boot driver for Linux hosts. This driver allows the host
 platform to communicate with the Myriad X device using the protocol designed to
 transfer Myriad X application binaries over PCIe before booting.
 
-Limitation
-==========
-
-This driver only allows the loading of Myriad X application binaries that are
-smaller than 4 MB.
-
 Driver build
 ============
 

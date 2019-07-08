@@ -1,19 +1,17 @@
 /*******************************************************************************
  *
- * Intel Myriad-X PCIe Serial Driver: MMIO access functions
+ * MX MMIO access API
  *
- * Copyright (C) 2018 Intel Corporation
+ * Copyright (C) 2019 Intel Corporation
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
  ******************************************************************************/
 
-#ifndef MXVP_MMIO_HEADER_
-#define MXVP_MMIO_HEADER_
+#ifndef COMMON_MX_MMIO_H_
+#define COMMON_MX_MMIO_H_
 
-#include <linux/module.h>
-
-#include "mxlk_common.h"
+#include <linux/io.h>
 
 /*
  * @brief Performs platform independent uint8_t read from iomem
@@ -22,9 +20,9 @@
  * @param[in] offset - offset within iomem to read from
  *
  * @return:
- *  	 Value read from location as uint8_t
+ *       Value read from location as uint8_t
  */
-static u8 mxlk_rd8(void __iomem *base, int offset)
+static u8 mx_rd8(void __iomem *base, int offset)
 {
     return ioread8(base + offset);
 }
@@ -36,9 +34,9 @@ static u8 mxlk_rd8(void __iomem *base, int offset)
  * @param[in] offset - offset within iomem to read from
  *
  * @return:
- *  	 Value read from location as uint16_t
+ *       Value read from location as uint16_t
  */
-static u16 mxlk_rd16(void __iomem *base, int offset)
+static u16 mx_rd16(void __iomem *base, int offset)
 {
     return ioread16(base + offset);
 }
@@ -50,9 +48,9 @@ static u16 mxlk_rd16(void __iomem *base, int offset)
  * @param[in] offset - offset within iomem to read from
  *
  * @return:
- *  	 Value read from location as uint32_t
+ *       Value read from location as uint32_t
  */
-static u32 mxlk_rd32(void __iomem *base, int offset)
+static u32 mx_rd32(void __iomem *base, int offset)
 {
     return ioread32(base + offset);
 }
@@ -64,15 +62,15 @@ static u32 mxlk_rd32(void __iomem *base, int offset)
  * @param[in] offset - offset within iomem to read from
  *
  * @return:
- *  	 Value read from location as uint64_t
+ *       Value read from location as uint64_t
  */
-static u64 mxlk_rd64(void __iomem *base, int offset)
+static u64 mx_rd64(void __iomem *base, int offset)
 {
     u64 low;
     u64 high;
 
-    low  = mxlk_rd32(base, offset);
-    high = mxlk_rd32(base, offset + sizeof(u32));
+    low  = mx_rd32(base, offset);
+    high = mx_rd32(base, offset + sizeof(u32));
 
     return low | (high << 32);
 }
@@ -85,7 +83,7 @@ static u64 mxlk_rd64(void __iomem *base, int offset)
  * @param[out] buffer - pointer to location to store values
  * @param[in]  len - length in bytes to read into buffer
  */
-static void mxlk_rd_buffer(void __iomem *base, int offset, void *buffer, size_t len)
+static void mx_rd_buf(void __iomem *base, int offset, void *buffer, size_t len)
 {
     memcpy_fromio(buffer, base + offset, len);
 }
@@ -97,7 +95,7 @@ static void mxlk_rd_buffer(void __iomem *base, int offset, void *buffer, size_t 
  * @param[in] offset - offset within iomem to read from
  * @param[in] value - uint8_t value to write
  */
-static void mxlk_wr8(void __iomem *base, int offset, u8 value)
+static void mx_wr8(void __iomem *base, int offset, u8 value)
 {
     iowrite8(value, base + offset);
 }
@@ -109,7 +107,7 @@ static void mxlk_wr8(void __iomem *base, int offset, u8 value)
  * @param[in] offset - offset within iomem to read from
  * @param[in] value - uint16_t value to write
  */
-static void mxlk_wr16(void __iomem *base, int offset, u16 value)
+static void mx_wr16(void __iomem *base, int offset, u16 value)
 {
     iowrite16(value, base + offset);
 }
@@ -121,7 +119,7 @@ static void mxlk_wr16(void __iomem *base, int offset, u16 value)
  * @param[in] offset - offset within iomem to read from
  * @param[in] value - uint32_t value to write
  */
-static void mxlk_wr32(void __iomem *base, int offset, u32 value)
+static void mx_wr32(void __iomem *base, int offset, u32 value)
 {
     iowrite32(value, base + offset);
 }
@@ -133,10 +131,10 @@ static void mxlk_wr32(void __iomem *base, int offset, u32 value)
  * @param[in] offset - offset within iomem to read from
  * @param[in] value - uint64_t value to write
  */
-static void mxlk_wr64(void __iomem *base, int offset, u64 value)
+static void mx_wr64(void __iomem *base, int offset, u64 value)
 {
-    mxlk_wr32(base, offset, value);
-    mxlk_wr32(base, offset + sizeof(u32), value >> 32);
+    mx_wr32(base, offset, value);
+    mx_wr32(base, offset + sizeof(u32), value >> 32);
 }
 
 /*
@@ -147,9 +145,9 @@ static void mxlk_wr64(void __iomem *base, int offset, u64 value)
  * @param[in] buffer - pointer to location to write
  * @param[in] len - length in bytes to write into iomem
  */
-static void mxlk_wr_buffer(void __iomem *base, int offset, void *buffer, size_t len)
+static void mx_wr_buf(void __iomem *base, int offset, void *buffer, size_t len)
 {
     memcpy_toio(base + offset, buffer, len);
 }
 
-#endif
+#endif /* COMMON_MX_MMIO_H_ */

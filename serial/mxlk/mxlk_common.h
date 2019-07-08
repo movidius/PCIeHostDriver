@@ -8,8 +8,8 @@
  *
  ******************************************************************************/
 
-#ifndef MXLK_COMMON_HEADER_
-#define MXLK_COMMON_HEADER_
+#ifndef SERIAL_MXLK_MXLK_COMMON_H_
+#define SERIAL_MXLK_MXLK_COMMON_H_
 
 #include <linux/types.h>
 
@@ -49,10 +49,16 @@ struct mxlk_transfer_desc {
 ////////////////////////////////////////////////////////////////////////////////
 
 /*
+ * Main magic size, in bytes, and value.
+ */
+#define MXLK_MAIN_MAGIC_BYTES 16
+#define MXLK_MAIN_MAGIC "VPULINK-00000000"
+
+/*
  * Version to be exposed by both device and host
  */
 #define MXLK_VERSION_MAJOR  (1)
-#define MXLK_VERSION_MINOR  (2)
+#define MXLK_VERSION_MINOR  (3)
 #define MXLK_VERSION_BUILD  (0)
 #define MXLK_MMIO_SIZE      (16 * 1024)
 
@@ -70,17 +76,17 @@ struct mxlk_version {
 #define MXLK_STATUS_BOOT    ( 1)
 #define MXLK_STATUS_RUN     ( 2)
 
-
 /*
  * MMIO layout and offsets shared between device and host
  */
 struct mxlk_mmio {
+    uint8_t main_magic[MXLK_MAIN_MAGIC_BYTES];
     struct mxlk_version version;
     uint32_t device_status;
     uint32_t host_status;
     uint32_t cap_offset;
 } __attribute__((packed));
-
+#define MXLK_MMIO_MAIN_MAGIC    (offsetof(struct mxlk_mmio, main_magic))
 #define MXLK_MMIO_VERSION       (offsetof(struct mxlk_mmio, version))
 #define MXLK_MMIO_DEV_STATUS    (offsetof(struct mxlk_mmio, device_status))
 #define MXLK_MMIO_HOST_STATUS   (offsetof(struct mxlk_mmio, host_status))
@@ -141,4 +147,4 @@ struct mxlk_cap_txrx {
     struct mxlk_cap_pipe rx;
 } __attribute__((packed));
 
-#endif
+#endif /* SERIAL_MXLK_MXLK_COMMON_H_ */

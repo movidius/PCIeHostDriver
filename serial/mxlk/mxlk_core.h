@@ -8,8 +8,8 @@
  *
  ******************************************************************************/
 
-#ifndef MXLK_CORE_HEADER_
-#define MXLK_CORE_HEADER_
+#ifndef SERIAL_MXLK_MXLK_CORE_H_
+#define SERIAL_MXLK_MXLK_CORE_H_
 
 #include "mxlk.h"
 
@@ -26,7 +26,7 @@
  *       0 - success
  *      <0 - linux error code
  */
-int  mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev, struct workqueue_struct * wq);
+int mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev, struct workqueue_struct * wq);
 
 /*
  * @brief cleans up mxlk core component
@@ -86,4 +86,46 @@ ssize_t mxlk_core_read(struct mxlk_interface *inf, void *buffer, size_t length);
  */
 ssize_t mxlk_core_write(struct mxlk_interface *inf, void *buffer, size_t length);
 
-#endif
+/*
+ * @brief indicates if there is read data available for a given interface
+ *
+ * @param[in] inf    - pointer to interface instance
+ *
+ * @return true if there is data available, false otherwise
+ */
+bool mxlk_core_read_data_available(struct mxlk_interface *inf);
+
+/*
+ * @brief indicates if there are available buffers in the TX pool
+ *
+ * @param[in] mxlk - pointer to mxlk instance
+ *
+ * @return true if there are buffers available, false otherwise
+ */
+bool mxlk_core_write_buffer_available(struct mxlk *mxlk);
+
+/*
+ * @brief resets the MX device
+ *
+ * @param[in] mxlk - pointer to mxlk instance
+ *
+ * @return:
+ *       0 - success
+ *      <0 - linux error code
+ */
+int mxlk_core_reset_dev(struct mxlk *mxlk);
+
+/*
+ * @brief loads and boots an MX application image on the MX device
+ *
+ * @param[in] mxlk - pointer to mxlk instance
+ * @param[in] buffer - pointer to userspace buffer containing the MX image
+ * @param[in] length - length of the MX image
+ *
+ * @return:
+ *       0 - success
+ *      <0 - linux error code
+ */
+int mxlk_core_boot_dev(struct mxlk *mxlk, const char *buffer, size_t length);
+
+#endif /* SERIAL_MXLK_MXLK_CORE_H_ */

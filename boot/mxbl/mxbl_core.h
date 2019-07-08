@@ -8,8 +8,8 @@
  *
  ******************************************************************************/
 
-#ifndef MXBL_BSPEC_HEADER_
-#define MXBL_BSPEC_HEADER_
+#ifndef BOOT_MXBL_MXBL_CORE_H_
+#define BOOT_MXBL_MXBL_CORE_H_
 
 #include "mxbl.h"
 
@@ -22,14 +22,14 @@
  *       0 - success
  *      <0 - linux error code
  */
-int mxbl_bspec_init(struct mxbl *mxbl, struct pci_dev *pdev, struct workqueue_struct * wq);
+int mxbl_core_init(struct mxbl *mxbl, struct pci_dev *pdev, struct workqueue_struct * wq);
 
 /*
  * @brief Cleanup of mxbl device instance
  *
  * @param[in] mxbl - pointer to mxbl object
  */
-void mxbl_bspec_cleanup(struct mxbl *mxbl);
+void mxbl_core_cleanup(struct mxbl *mxbl);
 
 /*
  * @brief Performs first stage boot
@@ -43,4 +43,5 @@ void mxbl_bspec_cleanup(struct mxbl *mxbl);
  *      <0 - linux error code
  */
 int mxbl_first_stage_transfer(struct mxbl *mxbl, void *buffer, size_t length);
-#endif
+
+#endif /* BOOT_MXBL_MXBL_CORE_H_ */

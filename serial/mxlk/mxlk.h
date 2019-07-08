@@ -8,8 +8,8 @@
  *
  ******************************************************************************/
 
-#ifndef MXLK_HEADER_
-#define MXLK_HEADER_
+#ifndef SERIAL_MXLK_MXLK_H_
+#define SERIAL_MXLK_MXLK_H_
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -26,6 +26,11 @@
 #include <linux/slab_def.h>
 #include <linux/dma-mapping.h>
 #include <linux/cache.h>
+#include <linux/wait.h>
+
+#include "mx_common.h"
+#include "mx_mmio.h"
+#include "mx_print.h"
 
 #include "mxlk_common.h"
 
@@ -85,6 +90,7 @@ struct mxlk_interface {
     struct mutex wlock;
     struct mxlk_list read;
     struct mxlk_buf_desc *partial_read;
+    wait_queue_head_t rd_waitq;
 };
 
 struct mxlk_stats {
@@ -108,6 +114,11 @@ struct mxlk {
     int  unit;
     char name[MXLK_MAX_NAME_LEN];
 
+    struct cdev op_cdev;
+    struct device *op_dev;
+
+    bool boot_ready;
+
     struct mxlk_interface interfaces[MXLK_NUM_INTERFACES];
 
     size_t fragment_size;
@@ -118,6 +129,7 @@ struct mxlk {
     struct mxlk_list write;
     struct mxlk_list rx_pool;
     struct mxlk_list tx_pool;
+    wait_queue_head_t wr_waitq;
 
     struct work_struct rx_event;
     struct work_struct tx_event;
@@ -126,6 +138,8 @@ struct mxlk {
     struct device_attribute debug;
     struct mxlk_stats stats;
     struct mxlk_stats stats_old;
+
+    struct mx_dev mx_dev;
 };
 
-#endif
+#endif /* SERIAL_MXLK_MXLK_H_ */

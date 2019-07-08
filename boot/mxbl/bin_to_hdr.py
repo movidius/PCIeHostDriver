@@ -21,7 +21,7 @@ import subprocess
 from shutil import copyfile
 
 if len(sys.argv) != 2 :
-    print "usage : " + sys.argv[0] + " <path/to/binary>"
+    print ("usage : " + sys.argv[0] + " <path/to/binary>")
     exit (1)
 
 proc = subprocess.Popen("xxd -i " + sys.argv[1] + " > temp.h", stdout=subprocess.PIPE, shell=True)
@@ -29,14 +29,14 @@ proc = subprocess.Popen("xxd -i " + sys.argv[1] + " > temp.h", stdout=subprocess
 if proc.returncode != 0 :
 	exit (1)
 
-os.remove("mxbl_first_stage_image.h") if os.path.exists("mxbl_first_stage_image.h") else None
+os.remove("mxbl_boot_image.h") if os.path.exists("mxbl_boot_image.h") else None
 
-with open("temp.h","r") as temp, open("mxbl_first_stage_image.h", "w") as mxbl:
-    mxbl.write("#ifndef MXBL_FIRST_STAGE_IMAGE_HEADER_\n")
-    mxbl.write("#define MXBL_FIRST_STAGE_IMAGE_HEADER_\n")
+with open("temp.h","r") as temp, open("mxbl_boot_image.h", "w") as mxbl:
+    mxbl.write("#ifndef MXBL_BOOT_IMAGE_HEADER_\n")
+    mxbl.write("#define MXBL_BOOT_IMAGE_HEADER_\n")
     mxbl.write("#include <linux/types.h>\n")
     mxbl.write("// " + os.path.basename(sys.argv[1]) + "\n")
-    mxbl.write("const u8 mxbl_first_stage_image[] = {\n")
+    mxbl.write("const u8 mxbl_boot_image[] = {\n")
 
     array = temp.readlines()
     for line in array[1:-1] :

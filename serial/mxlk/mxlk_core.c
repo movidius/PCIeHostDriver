@@ -11,11 +11,12 @@
 #include <linux/uaccess.h>
 #include <linux/delay.h>
 
-#include "mxlk_pci.h"
+#include "mx_pci.h"
+#include "mx_boot.h"
+#include "mx_reset.h"
+
 #include "mxlk_char.h"
 #include "mxlk_core.h"
-#include "mxlk_mmio.h"
-#include "mxlk_print.h"
 #include "mxlk_capabilities.h"
 
 /*
@@ -37,8 +38,11 @@ module_param(tx_pool_size, int, S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(tx_pool_size, "transmit pool size (default 5MB)");
 
 
-static ssize_t mxlk_debug_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t mxlk_debug_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+static ssize_t mxlk_debug_show(struct device *dev,
+                               struct device_attribute *attr, char *buf);
+static ssize_t mxlk_debug_store(struct device *dev,
+                                struct device_attribute *attr,
+                                const char *buf, size_t count);
 
 static int mxlk_version_check(struct mxlk *mxlk);
 static void mxlk_set_host_status(struct mxlk *mxlk, int status);
@@ -57,9 +61,11 @@ static void mxlk_free_rx_bd(struct mxlk *mxlk, struct mxlk_buf_desc * bd);
 static struct mxlk_buf_desc *mxlk_alloc_tx_bd(struct mxlk *mxlk);
 static void mxlk_free_tx_bd(struct mxlk *mxlk, struct mxlk_buf_desc * bd);
 
-static int mxlk_interfaces_init(struct mxlk *mxlk);
+static int mxlk_all_chrdev_init(struct mxlk *mxlk);
+static void mxlk_all_chrdev_cleanup(struct mxlk *mxlk);
+static void mxlk_interfaces_init(struct mxlk *mxlk);
 static void mxlk_interfaces_cleanup(struct mxlk *mxlk);
-static int mxlk_interface_init(struct mxlk *mxlk, int id);
+static void mxlk_interface_init(struct mxlk *mxlk, int id);
 static void mxlk_interface_cleanup(struct mxlk_interface *inf);
 static void mxlk_add_bd_to_interface(struct mxlk *mxlk, struct mxlk_buf_desc *bd);
 
@@ -92,12 +98,16 @@ static void mxlk_start_tx(struct mxlk *mxlk);
 static void mxlk_start_rx(struct mxlk *mxlk);
 static void mxlk_send_doorbell(struct mxlk *mxlk);
 static void mxlk_ring_doorbell(struct mxlk *mxlk);
+static int mxlk_comms_init(struct mxlk *mxlk);
+static void mxlk_comms_cleanup(struct mxlk *mxlk);
 
-static int mxlk_map_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd, int direction);
-static void mxlk_unmap_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd, int direction);
+static int mxlk_map_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd,
+                        int direction);
+static void mxlk_unmap_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd,
+                           int direction);
 
 static ssize_t mxlk_debug_show(struct device *dev,
-                            struct device_attribute *attr, char *buf)
+                               struct device_attribute *attr, char *buf)
 {
     struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
     struct mxlk *mxlk = pci_get_drvdata(pdev);
@@ -128,15 +138,15 @@ static ssize_t mxlk_debug_show(struct device *dev,
     return strlen(buf);
 }
 
-static ssize_t mxlk_debug_store(struct device *dev, struct device_attribute *attr,
-                            const char *buf, size_t count)
+static ssize_t mxlk_debug_store(struct device *dev,
+                                struct device_attribute *attr,
+                                const char *buf, size_t count)
 {
     struct pci_dev *pdev = container_of(dev, struct pci_dev, dev);
     struct mxlk *mxlk = pci_get_drvdata(pdev);
 
     memset(&mxlk->stats_old, 0, sizeof(struct mxlk_stats));
     memset(&mxlk->stats,     0, sizeof(struct mxlk_stats));
-
 
     return count;
 }
@@ -145,20 +155,20 @@ static int mxlk_version_check(struct mxlk *mxlk)
 {
     struct mxlk_version version;
 
-    mxlk_rd_buffer(mxlk->mmio, MXLK_MMIO_VERSION, &version, sizeof(version));
+    mx_rd_buf(mxlk->mmio, MXLK_MMIO_VERSION, &version, sizeof(version));
 
     if ((version.major != MXLK_VERSION_MAJOR) ||
         (version.minor != MXLK_VERSION_MINOR)) {
-        mxlk_error("version mismatch, dev : %d.%d.%d, host : %d.%d.%d\n",
-                   version.major, version.minor, version.build,
-                   MXLK_VERSION_MAJOR, MXLK_VERSION_MINOR, MXLK_VERSION_BUILD);
+        mx_err("version mismatch, dev : %d.%d.%d, host : %d.%d.%d\n",
+               version.major, version.minor, version.build,
+               MXLK_VERSION_MAJOR, MXLK_VERSION_MINOR, MXLK_VERSION_BUILD);
 
         return -EIO;
     }
 
-    mxlk_info("versions, dev : %d.%d.%d, host : %d.%d.%d\n",
-                  version.major, version.minor, version.build,
-                  MXLK_VERSION_MAJOR, MXLK_VERSION_MINOR, MXLK_VERSION_BUILD);
+    mx_info("versions, dev : %d.%d.%d, host : %d.%d.%d\n",
+            version.major, version.minor, version.build,
+            MXLK_VERSION_MAJOR, MXLK_VERSION_MINOR, MXLK_VERSION_BUILD);
 
     return 0;
 }
@@ -166,12 +176,12 @@ static int mxlk_version_check(struct mxlk *mxlk)
 static void mxlk_set_host_status(struct mxlk *mxlk, int status)
 {
     mxlk->status = status;
-    mxlk_wr32(mxlk->mmio, MXLK_MMIO_HOST_STATUS, status);
+    mx_wr32(mxlk->mmio, MXLK_MMIO_HOST_STATUS, status);
 }
 
 static int mxlk_get_device_status(struct mxlk *mxlk)
 {
-    return mxlk_rd32(mxlk->mmio, MXLK_MMIO_DEV_STATUS);
+    return mx_rd32(mxlk->mmio, MXLK_MMIO_DEV_STATUS);
 }
 
 static int mxlk_list_init(struct mxlk_list *list)
@@ -203,7 +213,7 @@ static void mxlk_list_cleanup(struct mxlk_list *list)
 static int mxlk_list_put(struct mxlk_list *list, struct mxlk_buf_desc *bd)
 {
     if (!bd) {
-        mxlk_error("attempt to add null buf desc to list!\n");
+        mx_err("attempt to add null buf desc to list!\n");
         return -EINVAL;
     }
 
@@ -326,17 +336,48 @@ static void mxlk_free_tx_bd(struct mxlk *mxlk, struct mxlk_buf_desc * bd)
     }
 }
 
-static int mxlk_interfaces_init(struct mxlk *mxlk)
+static int mxlk_all_chrdev_init(struct mxlk *mxlk)
 {
+    int error;
     int index;
+    struct mxlk_interface *inf;
 
-    mxlk_list_init(&mxlk->write);
     for (index = 0; index < MXLK_NUM_INTERFACES; index++) {
-        mxlk_interface_init(mxlk, index);
+        inf = mxlk->interfaces + index;
+        /* Set mxlk pointer now because it used by mxlk_chrdev_add(). The rest
+         * of the interface structure will be initialized later. */
+        inf->mxlk = mxlk;
+        error = mxlk_chrdev_add(inf);
+        if (error) {
+            return error;
+        }
     }
 
     return 0;
 }
+
+static void mxlk_all_chrdev_cleanup(struct mxlk *mxlk)
+{
+    int index;
+    struct mxlk_interface *inf;
+
+    for (index = 0; index < MXLK_NUM_INTERFACES; index++) {
+        inf = mxlk->interfaces + index;
+        mxlk_chrdev_remove(inf);
+    }
+}
+
+static void mxlk_interfaces_init(struct mxlk *mxlk)
+{
+    int index;
+
+    mxlk_list_init(&mxlk->write);
+    init_waitqueue_head(&mxlk->wr_waitq);
+    for (index = 0; index < MXLK_NUM_INTERFACES; index++) {
+        mxlk_interface_init(mxlk, index);
+    }
+}
+
 static void mxlk_interfaces_cleanup(struct mxlk *mxlk)
 {
     int index;
@@ -347,20 +388,18 @@ static void mxlk_interfaces_cleanup(struct mxlk *mxlk)
     }
 }
 
-static int mxlk_interface_init(struct mxlk *mxlk, int id)
+static void mxlk_interface_init(struct mxlk *mxlk, int id)
 {
     struct mxlk_interface *inf = mxlk->interfaces + id;
 
     inf->id = id;
-    inf->mxlk = mxlk;
     inf->opened = 0;
 
     inf->partial_read = NULL;
     mxlk_list_init(&inf->read);
     mutex_init(&inf->rlock);
     mutex_init(&inf->wlock);
-
-    return mxlk_chrdev_add(inf);
+    init_waitqueue_head(&inf->rd_waitq);
 }
 
 static void mxlk_interface_cleanup(struct mxlk_interface *inf)
@@ -377,8 +416,6 @@ static void mxlk_interface_cleanup(struct mxlk_interface *inf)
     while ((bd = mxlk_list_get(&inf->read))) {
         mxlk_free_rx_bd(inf->mxlk, bd);
     }
-
-    mxlk_chrdev_remove(inf);
 }
 
 static void mxlk_add_bd_to_interface(struct mxlk *mxlk, struct mxlk_buf_desc *bd)
@@ -388,6 +425,8 @@ static void mxlk_add_bd_to_interface(struct mxlk *mxlk, struct mxlk_buf_desc *bd
     inf = mxlk->interfaces + bd->interface;
 
     mxlk_list_put(&inf->read, bd);
+    /* Wake up read wait queue in case someone is waiting for RX data */
+    wake_up(&inf->rd_waitq);
 }
 
 static int mxlk_discover_txrx(struct mxlk *mxlk)
@@ -407,62 +446,62 @@ static int mxlk_discover_txrx(struct mxlk *mxlk)
 
 static void mxlk_set_td_address(struct mxlk_transfer_desc *td, u64 address)
 {
-    mxlk_wr64(td, offsetof(struct mxlk_transfer_desc, address), address);
+    mx_wr64(td, offsetof(struct mxlk_transfer_desc, address), address);
 }
 
 static u64 mxlk_get_td_address(struct mxlk_transfer_desc *td)
 {
-    return mxlk_rd64(td, offsetof(struct mxlk_transfer_desc, address));
+    return mx_rd64(td, offsetof(struct mxlk_transfer_desc, address));
 }
 
 static void mxlk_set_td_length(struct mxlk_transfer_desc *td, u32 length)
 {
-    mxlk_wr32(td, offsetof(struct mxlk_transfer_desc, length), length);
+    mx_wr32(td, offsetof(struct mxlk_transfer_desc, length), length);
 }
 
 static u32  mxlk_get_td_length(struct mxlk_transfer_desc *td)
 {
-    return mxlk_rd32(td, offsetof(struct mxlk_transfer_desc, length));
+    return mx_rd32(td, offsetof(struct mxlk_transfer_desc, length));
 }
 
 static void mxlk_set_td_interface(struct mxlk_transfer_desc *td, u16 interface)
 {
-    mxlk_wr16(td, offsetof(struct mxlk_transfer_desc, interface), interface);
+    mx_wr16(td, offsetof(struct mxlk_transfer_desc, interface), interface);
 }
 
 static u16  mxlk_get_td_interface(struct mxlk_transfer_desc *td)
 {
-    return mxlk_rd16(td, offsetof(struct mxlk_transfer_desc, interface));
+    return mx_rd16(td, offsetof(struct mxlk_transfer_desc, interface));
 }
 
 static void mxlk_set_td_status(struct mxlk_transfer_desc *td, u16 status)
 {
-    mxlk_wr16(td, offsetof(struct mxlk_transfer_desc, status), status);
+    mx_wr16(td, offsetof(struct mxlk_transfer_desc, status), status);
 }
 
 static u16  mxlk_get_td_status(struct mxlk_transfer_desc *td)
 {
-    return mxlk_rd16(td, offsetof(struct mxlk_transfer_desc, status));
+    return mx_rd16(td, offsetof(struct mxlk_transfer_desc, status));
 }
 
 static void mxlk_set_tdr_head(struct mxlk_pipe *p, u32 head)
 {
-    mxlk_wr32(p->head, 0, head);
+    mx_wr32(p->head, 0, head);
 }
 
 static u32  mxlk_get_tdr_head(struct mxlk_pipe *p)
 {
-    return mxlk_rd32(p->head, 0);
+    return mx_rd32(p->head, 0);
 }
 
 static void mxlk_set_tdr_tail(struct mxlk_pipe *p, u32 tail)
 {
-    mxlk_wr32(p->tail, 0, tail);
+    mx_wr32(p->tail, 0, tail);
 }
 
 static u32  mxlk_get_tdr_tail(struct mxlk_pipe *p)
 {
-    return mxlk_rd32(p->tail, 0);
+    return mx_rd32(p->tail, 0);
 }
 
 static int mxlk_txrx_init(struct mxlk *mxlk, struct mxlk_cap_txrx *cap)
@@ -473,31 +512,31 @@ static int mxlk_txrx_init(struct mxlk *mxlk, struct mxlk_cap_txrx *cap)
     struct mxlk_stream *rx = &mxlk->rx;
 
     mxlk->txrx = cap;
-    mxlk->fragment_size = mxlk_rd32(&cap->fragment_size, 0);
+    mxlk->fragment_size = mx_rd32(&cap->fragment_size, 0);
 
     tx->busy = 0;
-    tx->pipe.ndesc = mxlk_rd32(&cap->tx.ndesc, 0);
+    tx->pipe.ndesc = mx_rd32(&cap->tx.ndesc, 0);
     tx->pipe.head  = &cap->tx.head;
     tx->pipe.tail  = &cap->tx.tail;
-    tx->pipe.old   = mxlk_rd32(&cap->tx.tail, 0);
-    tx->pipe.tdr   = mxlk->mmio + mxlk_rd32(&cap->tx.ring, 0);
+    tx->pipe.old   = mx_rd32(&cap->tx.tail, 0);
+    tx->pipe.tdr   = mxlk->mmio + mx_rd32(&cap->tx.ring, 0);
 
     tx->ddr = kzalloc(sizeof(struct mxlk_dma_desc) * tx->pipe.ndesc, GFP_KERNEL);
     if (!tx->ddr) {
-        mxlk_error("failed to alloc tx dma desc ring\n");
+        mx_err("failed to alloc tx dma desc ring\n");
         goto error;
     }
 
     rx->busy = 0;
-    rx->pipe.ndesc = mxlk_rd32(&cap->rx.ndesc, 0);
+    rx->pipe.ndesc = mx_rd32(&cap->rx.ndesc, 0);
     rx->pipe.head  = &cap->rx.head;
     rx->pipe.tail  = &cap->rx.tail;
-    rx->pipe.old   = mxlk_rd32(&cap->tx.head, 0);
-    rx->pipe.tdr   = mxlk->mmio + mxlk_rd32(&cap->rx.ring, 0);
+    rx->pipe.old   = mx_rd32(&cap->tx.head, 0);
+    rx->pipe.tdr   = mxlk->mmio + mx_rd32(&cap->rx.ring, 0);
 
     rx->ddr = kzalloc(sizeof(struct mxlk_dma_desc) * rx->pipe.ndesc, GFP_KERNEL);
     if (!rx->ddr) {
-        mxlk_error("failed to alloc rx dma desc ring\n");
+        mx_err("failed to alloc rx dma desc ring\n");
         goto error;
     }
 
@@ -510,7 +549,7 @@ static int mxlk_txrx_init(struct mxlk *mxlk, struct mxlk_cap_txrx *cap)
         if (bd) {
             mxlk_list_put(&mxlk->rx_pool, bd);
         } else {
-            mxlk_error("failed to alloc all rx pool descriptors\n");
+            mx_err("failed to alloc all rx pool descriptors\n");
             goto error;
         }
     }
@@ -524,7 +563,7 @@ static int mxlk_txrx_init(struct mxlk *mxlk, struct mxlk_cap_txrx *cap)
         if (bd) {
             mxlk_list_put(&mxlk->tx_pool, bd);
         } else {
-            mxlk_error("failed to alloc all tx pool descriptors\n");
+            mx_err("failed to alloc all tx pool descriptors\n");
             goto error;
         }
     }
@@ -535,13 +574,13 @@ static int mxlk_txrx_init(struct mxlk *mxlk, struct mxlk_cap_txrx *cap)
         struct mxlk_transfer_desc *td = rx->pipe.tdr + index;
 
         if (!bd) {
-            mxlk_error("failed to alloc rx ring buf desc [%d]\n", index);
+            mx_err("failed to alloc rx ring buf desc [%d]\n", index);
             goto error;
         }
 
         dd->bd = bd;
         if (mxlk_map_dma(mxlk, dd, DMA_FROM_DEVICE)) {
-            mxlk_error("failed to map rx bd\n");
+            mx_err("failed to map rx bd\n");
             goto error;
         }
 
@@ -595,10 +634,22 @@ static void mxlk_txrx_cleanup(struct mxlk *mxlk)
 static irqreturn_t mxlk_interrupt(int irq, void *args)
 {
     struct mxlk *mxlk = args;
+    enum mx_opmode opmode;
 
-    mxlk->stats.interrupts++;
-    mxlk_start_tx(mxlk);
-    mxlk_start_rx(mxlk);
+    opmode = mx_get_opmode(&mxlk->mx_dev);
+    if (opmode == MX_OPMODE_APP_VPULINK) {
+        mxlk->stats.interrupts++;
+        mxlk_start_tx(mxlk);
+        mxlk_start_rx(mxlk);
+    } else if (opmode == MX_OPMODE_BOOT) {
+        u32 identity = mx_rd32(mxlk->mmio, MX_INT_IDENTITY);
+        if (field_get(MX_INT_STATUS_UPDATE, identity)) {
+            mxlk->boot_ready = true;
+        }
+        mx_wr32(mxlk->mmio, MX_INT_IDENTITY, 0);
+    } else {
+        mx_err("Unexpected MSI interrupt in operation mode %d\n", opmode);
+    }
 
     return IRQ_HANDLED;
 }
@@ -609,24 +660,23 @@ static irqreturn_t mxlk_interrupt(int irq, void *args)
 
 static int mxlk_events_init(struct mxlk *mxlk)
 {
-    int irq;
     int error;
 
     INIT_WORK(&mxlk->rx_event, mxlk_rx_event_handler);
     INIT_WORK(&mxlk->tx_event, mxlk_tx_event_handler);
     INIT_WORK(&mxlk->send_doorbell, mxlk_send_doorbell_handler);
 
-    error = pci_alloc_irq_vectors(mxlk->pci, 1, 1, PCI_IRQ_MSI);
-    if (error < 0) {
-        mxlk_error("failed to allocate %d MSI vectors - %d\n", 1, error);
+    error = mx_pci_irq_init(&mxlk->mx_dev, MXLK_DRIVER_NAME, mxlk_interrupt, mxlk);
+    if (error) {
         return error;
     }
 
-    irq = pci_irq_vector(mxlk->pci, 0);
-    error = request_irq(irq, mxlk_interrupt, 0, MXLK_DRIVER_NAME, mxlk);
-    if (error) {
-        mxlk_error("failed to request irqs - %d\n", error);
-        return error;
+    /* Allow some time for the device to complete initialization after MSI
+     * enable handshake. */
+    msleep(50);
+
+    if (mx_get_opmode(&mxlk->mx_dev) == MX_OPMODE_BOOT) {
+        mx_boot_status_update_int_enable(&mxlk->mx_dev);
     }
 
     return 0;
@@ -634,11 +684,10 @@ static int mxlk_events_init(struct mxlk *mxlk)
 
 static void mxlk_events_cleanup(struct mxlk *mxlk)
 {
-    int irq = pci_irq_vector(mxlk->pci, 0);
-
-    synchronize_irq(irq);
-    free_irq(irq, mxlk);
-    pci_free_irq_vectors(mxlk->pci);
+    if (mx_get_opmode(&mxlk->mx_dev) == MX_OPMODE_BOOT) {
+       mx_boot_status_update_int_disable(&mxlk->mx_dev);
+    }
+    mx_pci_irq_cleanup(&mxlk->mx_dev, mxlk);
 
     cancel_work_sync(&mxlk->send_doorbell);
     cancel_work_sync(&mxlk->rx_event);
@@ -652,7 +701,8 @@ static void mxlk_send_doorbell_handler(struct work_struct *work)
     mxlk_ring_doorbell(mxlk);
 }
 
-static int mxlk_map_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd, int direction)
+static int mxlk_map_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd,
+                        int direction)
 {
     struct device *dev = MXLK_TO_DEV(mxlk);
 
@@ -662,7 +712,8 @@ static int mxlk_map_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd, int directi
     return dma_mapping_error(dev, dd->phys);
 }
 
-static void mxlk_unmap_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd, int direction)
+static void mxlk_unmap_dma(struct mxlk *mxlk, struct mxlk_dma_desc *dd,
+                           int direction)
 {
     struct device *dev = MXLK_TO_DEV(mxlk);
 
@@ -686,7 +737,7 @@ static void mxlk_rx_event_handler(struct work_struct *work)
     ndesc =  rx->pipe.ndesc;
     tail  = mxlk_get_tdr_tail(&rx->pipe);
     head  = mxlk_get_tdr_head(&rx->pipe);
-    // clean old entries first
+    /* clean old entries first */
     while (head != tail) {
         td = rx->pipe.tdr + head;
         dd = rx->ddr + head;
@@ -722,7 +773,7 @@ static void mxlk_rx_event_handler(struct work_struct *work)
         dd->bd = replacement;
         error = mxlk_map_dma(mxlk, dd, DMA_FROM_DEVICE);
         if (error) {
-            mxlk_error("failed to map rx bd (%d)\n", error);
+            mx_err("failed to map rx bd (%d)\n", error);
         }
 
         mxlk_set_td_address(td, dd->phys);
@@ -752,6 +803,7 @@ static void mxlk_tx_event_handler(struct work_struct *work)
     struct mxlk_buf_desc *bd;
     struct mxlk_dma_desc *dd;
     struct mxlk_transfer_desc *td;
+    bool buffer_freed = false;
 
     mxlk->stats.tx_event_runs++;
 
@@ -760,14 +812,14 @@ static void mxlk_tx_event_handler(struct work_struct *work)
     tail  = mxlk_get_tdr_tail(&tx->pipe);
     head  = mxlk_get_tdr_head(&tx->pipe);
 
-    // clean old entries first
+    /* clean old entries first */
     while (old != head) {
         dd = tx->ddr + old;
         td = tx->pipe.tdr + old;
         bd = dd->bd;
         status = mxlk_get_td_status(td);
         if (status != MXLK_DESC_STATUS_SUCCESS) {
-            mxlk_error("detected tx desc failure (%u)\n", status);
+            mx_err("detected tx desc failure (%u)\n", status);
         }
         mxlk->stats.tx_krn.pkts++;
         mxlk->stats.tx_krn.bytes += bd->length;
@@ -776,10 +828,11 @@ static void mxlk_tx_event_handler(struct work_struct *work)
         mxlk_free_tx_bd(mxlk, dd->bd);
         dd->bd = NULL;
         old = MXLK_CIRCULAR_INC(old, ndesc);
+        buffer_freed = true;
     }
     tx->pipe.old = old;
 
-    // add new entries
+    /* add new entries */
     while (MXLK_CIRCULAR_INC(tail, ndesc) != head) {
         bd = mxlk_list_get(&mxlk->write);
         if (!bd) {
@@ -791,7 +844,8 @@ static void mxlk_tx_event_handler(struct work_struct *work)
 
         dd->bd = bd;
         if (mxlk_map_dma(mxlk, dd, DMA_TO_DEVICE)) {
-            mxlk_error("dma mapping error bd addr %px, size %zu\n", bd->data, bd->length);
+            mx_err("dma mapping error bd addr %px, size %zu\n",
+                   bd->data, bd->length);
             break;
         }
 
@@ -803,12 +857,16 @@ static void mxlk_tx_event_handler(struct work_struct *work)
         tail = MXLK_CIRCULAR_INC(tail, ndesc);
     }
 
-
     if (mxlk_get_tdr_tail(&tx->pipe) != tail) {
         mxlk_set_tdr_tail(&tx->pipe, tail);
         wmb();
         mmiowb();
         mxlk_send_doorbell(mxlk);
+    }
+
+    if (buffer_freed == true) {
+        /* Wake up write wait queue in case someone is waiting for TX buffers */
+        wake_up(&mxlk->wr_waitq);
     }
 }
 
@@ -836,21 +894,23 @@ static void mxlk_ring_doorbell(struct mxlk *mxlk)
     pci_write_config_dword(mxlk->pci, offset, value);
 }
 
-int  mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev, struct workqueue_struct *wq)
+int mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev,
+                   struct workqueue_struct *wq)
 {
     int error;
-    int status;
-    DEVICE_ATTR(debug, S_IWUSR | S_IRUGO, mxlk_debug_show, mxlk_debug_store);
 
     mxlk->wq = wq;
-    mxlk->unit = atomic_fetch_add(1, &units_found);
+    mxlk->pci = pdev;
+
+    mxlk->unit = atomic_fetch_inc(&units_found);
     if (mxlk->unit < MXLK_MAX_DEVICES) {
-         scnprintf(mxlk->name, MXLK_MAX_NAME_LEN, MXLK_DRIVER_NAME"%d", mxlk->unit);
+         scnprintf(mxlk->name, MXLK_MAX_NAME_LEN, MXLK_DRIVER_NAME"%d",
+                   mxlk->unit);
     } else {
         return -EPERM;
     }
 
-    error = mxlk_pci_init(mxlk, pdev);
+    error = mx_pci_init(&mxlk->mx_dev, pdev, mxlk, MXLK_DRIVER_NAME, &mxlk->mmio);
     if (error) {
         return error;
     }
@@ -860,12 +920,62 @@ int  mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev, struct workqueue_st
         goto error_events;
     }
 
-    // MSI enable allows endpoint to finish initialization, give time for this
-    msleep(50);
+    mx_boot_init(&mxlk->mx_dev);
+
+    /* Initialize character devices immediately: We need them to be alive at all
+     * time in order to be able to handle reset and boot operations. */
+    error = mxlk_all_chrdev_init(mxlk);
+    if (error) {
+        goto error_chrdev;
+    }
+
+    /* If the MX device is in proper application mode, start communications.
+     * If not, then we expect the user to reset the MX device and load a proper
+     * MX application before we can start operations. In this case,
+     * mxlk_comms_init() will be called at the end of the boot process. */
+    if (mx_get_opmode(&mxlk->mx_dev) == MX_OPMODE_APP_VPULINK) {
+        error = mxlk_comms_init(mxlk);
+        if (error) {
+            goto error_comms;
+        }
+    }
+
+    return 0;
+
+error_comms:
+    mxlk_all_chrdev_cleanup(mxlk);
+
+error_chrdev:
+    mxlk_events_cleanup(mxlk);
+
+error_events:
+    mx_pci_cleanup(&mxlk->mx_dev);
+    mx_err("core failed to init\n");
+
+    return error;
+}
+
+void mxlk_core_cleanup(struct mxlk *mxlk)
+{
+    if (mx_get_opmode(&mxlk->mx_dev) == MX_OPMODE_APP_VPULINK) {
+        mxlk_comms_cleanup(mxlk);
+    }
+    mxlk_all_chrdev_cleanup(mxlk);
+    mx_boot_cleanup(&mxlk->mx_dev);
+    mxlk_events_cleanup(mxlk);
+    mx_pci_cleanup(&mxlk->mx_dev);
+}
+
+static int mxlk_comms_init(struct mxlk *mxlk)
+{
+    int error;
+    int status;
+    DEVICE_ATTR(debug, S_IWUSR | S_IRUGO, mxlk_debug_show, mxlk_debug_store);
 
     status = mxlk_get_device_status(mxlk);
     if (status != MXLK_STATUS_RUN) {
-        mxlk_error("device status not RUNNING (%d)\n", status);
+        mx_err("device status not RUNNING (%d)\n", status);
+        error = -EIO;
         goto error_device_status;
     }
 
@@ -879,10 +989,7 @@ int  mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev, struct workqueue_st
         goto error_stream;
     }
 
-    error = mxlk_interfaces_init(mxlk);
-    if (error) {
-        goto error_interfaces;
-    }
+    mxlk_interfaces_init(mxlk);
 
     mxlk_set_host_status(mxlk, MXLK_STATUS_RUN);
 
@@ -896,39 +1003,23 @@ int  mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev, struct workqueue_st
 
     return 0;
 
-error_interfaces :
-    mxlk_txrx_cleanup(mxlk);
-
 error_stream :
 error_version :
 error_device_status :
-    mxlk_events_cleanup(mxlk);
-
-error_events :
-    mxlk_pci_cleanup(mxlk);
-
-    mxlk_error("core failed to init\n");
+    mx_err("comms failed to init\n");
 
     return error;
 }
 
-void mxlk_core_cleanup(struct mxlk *mxlk)
+static void mxlk_comms_cleanup(struct mxlk *mxlk)
 {
-    int index;
-
     mxlk_set_host_status(mxlk, MXLK_STATUS_UNINIT);
     mdelay(10);
 
-    mxlk_events_cleanup(mxlk);
-    mdelay(10);
-
     device_remove_file(MXLK_TO_DEV(mxlk), &mxlk->debug);
-    for (index = 0; index < MXLK_NUM_INTERFACES; index++) {
-        mxlk_interface_cleanup(mxlk->interfaces + index);
-    }
+    mxlk_interfaces_cleanup(mxlk);
     mxlk_txrx_cleanup(mxlk);
     mxlk_list_cleanup(&mxlk->write);
-    mxlk_pci_cleanup(mxlk);;
 }
 
 int mxlk_core_open(struct mxlk_interface *inf)
@@ -967,7 +1058,7 @@ ssize_t mxlk_core_read(struct mxlk_interface *inf, void *buffer, size_t length)
             bcopy = min(remaining, bd->length);
             error = copy_to_user(buffer, bd->data, bcopy);
             if (error) {
-                mxlk_error("failed to copy to user %d/%zu\n", error, bcopy);
+                mx_err("failed to copy to user %d/%zu\n", error, bcopy);
                 break;
             }
 
@@ -984,7 +1075,7 @@ ssize_t mxlk_core_read(struct mxlk_interface *inf, void *buffer, size_t length)
             }
         }
 
-        // save for next time
+        /* save for next time */
         inf->partial_read = bd;
     }
     mutex_unlock(&inf->rlock);
@@ -1008,7 +1099,7 @@ ssize_t mxlk_core_write(struct mxlk_interface *inf, void *buffer, size_t length)
             bcopy = min(bd->length, remaining);
             error = copy_from_user(bd->data, buffer, bcopy);
             if (error) {
-                mxlk_error("failed to copy from user %d/%zu\n", error, bcopy);
+                mx_err("failed to copy from user %d/%zu\n", error, bcopy);
                 break;
             }
 
@@ -1034,4 +1125,90 @@ ssize_t mxlk_core_write(struct mxlk_interface *inf, void *buffer, size_t length)
     mutex_unlock(&inf->wlock);
 
     return (length - remaining);
+}
+
+bool mxlk_core_read_data_available(struct mxlk_interface *inf)
+{
+    size_t bytes, buffers;
+
+    mxlk_list_info(&inf->read, &bytes, &buffers);
+    return (inf->partial_read || (buffers != 0));
+}
+
+bool mxlk_core_write_buffer_available(struct mxlk *mxlk)
+{
+    size_t bytes, buffers;
+
+    mxlk_list_info(&mxlk->tx_pool, &bytes, &buffers);
+    return (buffers != 0);
+}
+
+int mxlk_core_reset_dev(struct mxlk *mxlk)
+{
+    int error;
+    enum mx_opmode opmode;
+
+    opmode = mx_get_opmode(&mxlk->mx_dev);
+    if (opmode == MX_OPMODE_BOOT) {
+        /* MX device has already been reset - nothing to do */
+        return 0;
+    } else if (!MX_IS_OPMODE_APP(opmode)) {
+        /* PCIe reset driver is not accessible... */
+        return -EPERM;
+    }
+
+    mxlk_comms_cleanup(mxlk);
+    mxlk_events_cleanup(mxlk);
+
+    mx_pci_dev_lock(&mxlk->mx_dev);
+    error = mx_reset_device(&mxlk->mx_dev);
+    mx_pci_dev_unlock(&mxlk->mx_dev);
+    if (error) {
+        return error;
+    }
+
+    error = mxlk_events_init(mxlk);
+    if (error) {
+        return error;
+    }
+
+    return 0;
+}
+
+int mxlk_core_boot_dev(struct mxlk *mxlk, const char *buffer, size_t length)
+{
+    int error;
+    enum mx_opmode opmode;
+
+    /* Make sure we are in the correct operational mode and the device is ready. */
+    opmode = mx_get_opmode(&mxlk->mx_dev);
+    if ((opmode != MX_OPMODE_BOOT) || !mxlk->boot_ready) {
+        return -EPERM;
+    }
+
+    mxlk_events_cleanup(mxlk);
+
+    error = mx_boot_load_image(&mxlk->mx_dev, buffer, length, true);
+    if (error < 0) {
+        return error;
+    }
+
+    mxlk->boot_ready = false;
+
+    error = mxlk_events_init(mxlk);
+    if (error) {
+        return error;
+    }
+
+    opmode = mx_get_opmode(&mxlk->mx_dev);
+    if (opmode == MX_OPMODE_APP_VPULINK) {
+        error = mxlk_comms_init(mxlk);
+        if (error) {
+            return error;
+        }
+    } else {
+        mx_err("unexpected operation mode (%d) after MX FW loading!\n", opmode);
+    }
+
+    return 0;
 }
