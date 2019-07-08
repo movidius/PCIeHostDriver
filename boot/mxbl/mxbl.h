@@ -8,8 +8,8 @@
  *
  ******************************************************************************/
 
-#ifndef MXBL_HEADER_
-#define MXBL_HEADER_
+#ifndef BOOT_MXBL_MXBL_H_
+#define BOOT_MXBL_MXBL_H_
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -24,9 +24,9 @@
 #include <linux/version.h>
 #include <linux/atomic.h>
 
-#include "mxbl_mmio.h"
-
-#define MXBL_MX_PCI_DEVICE_ID 0x6200
+#include "mx_common.h"
+#include "mx_mmio.h"
+#include "mx_print.h"
 
 #define MXBL_DRIVER_NAME "mxbl"
 #define MXBL_DRIVER_DESC "Intel(R) Myriad X Bootloader"
@@ -34,25 +34,7 @@
 #define MXBL_TO_PCI(mxbl) ((mxbl)->pci)
 #define MXBL_TO_DEV(mxbl) (&(mxbl)->pci->dev)
 
-#define MXBL_DMA_ALIGNMENT  (16)
-
-#define MXBL_MAX_DEVICES    (1)
-
-/* Myriad-X IPC version */
-#define MXBL_BSPEC_REVISION  "1.1"
-
-/* Main Magic string to appear at start (bytes[15:0]) of MMIO region */
-#define MXBL_MM_BOOT_STR  "VPUBOOT"
-#define MXBL_MM_LOAD_STR  "VPULOADER"
-#define MXBL_MM_MAIN_STR  "VPUAL"
-
-/* Operation mode of Myriad-X, based on main magic value */
-enum mxbl_opmode {
-    MXBL_OPMODE_UNKNOWN,
-    MXBL_OPMODE_BOOT,
-    MXBL_OPMODE_LOADER,
-    MXBL_OPMODE_APP
-};
+#define MXBL_MAX_DEVICES 1
 
 /* Myriad-X Bootloader driver (MXBL) device instance control structure */
 struct mxbl {
@@ -66,7 +48,8 @@ struct mxbl {
     int chrdev_added; /* flag indicating char device exists (for cleanup) */
     struct cdev cdev; /* standard chrdev object */
     struct device *chrdev; /* standard chrdev object */
-    struct mutex transfer_lock; /* block overlapping transfers */
+
+    struct mx_dev mx_dev; /* MX device control structure */
 };
 
-#endif
+#endif /* BOOT_MXBL_MXBL_H_ */

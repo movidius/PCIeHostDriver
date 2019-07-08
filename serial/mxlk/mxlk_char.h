@@ -8,8 +8,8 @@
  *
  ******************************************************************************/
 
-#ifndef MXLK_CHAR_HEADER_
-#define MXLK_CHAR_HEADER_
+#ifndef SERIAL_MXLK_MXLK_CHAR_H_
+#define SERIAL_MXLK_MXLK_CHAR_H_
 
 #include "mxlk.h"
 
@@ -22,7 +22,7 @@
  *       0 - success
  *      <0 - linux error code
  */
-int  mxlk_chrdev_init(void);
+int mxlk_chrdev_init(void);
 
 /*
  * @brief Cleans up mxlk char component
@@ -33,7 +33,7 @@ int  mxlk_chrdev_init(void);
  *       0 - success
  *      <0 - linux error code
  */
-int  mxlk_chrdev_exit(void);
+int mxlk_chrdev_exit(void);
 
 /*
  * @brief Adds char interface associated with mxlk interface
@@ -44,7 +44,7 @@ int  mxlk_chrdev_exit(void);
  *       0 - success
  *      <0 - linux error code
  */
-int  mxlk_chrdev_add(struct mxlk_interface *inf);
+int mxlk_chrdev_add(struct mxlk_interface *inf);
 
 /*
  * @brief Removes char interface associated with mxlk interface
@@ -54,4 +54,4 @@ int  mxlk_chrdev_add(struct mxlk_interface *inf);
  */
 void mxlk_chrdev_remove(struct mxlk_interface *inf);
 
-#endif
+#endif /* SERIAL_MXLK_MXLK_CHAR_H_ */

@@ -8,8 +8,8 @@
  *
  ******************************************************************************/
 
-#ifndef MXLK_CAPABILITIES_HEADER_
-#define MXLK_CAPABILITIES_HEADER_
+#ifndef SERIAL_MXLK_MXLK_CAPABILITIES_H_
+#define SERIAL_MXLK_MXLK_CAPABILITIES_H_
 
 #include "mxlk.h"
 #include "mxlk_common.h"
@@ -31,4 +31,4 @@
  */
 void *mxlk_cap_find(struct mxlk *mxlk, u16 start, u16 cap);
 
-#endif
+#endif /* SERIAL_MXLK_MXLK_CAPABILITIES_H_ */

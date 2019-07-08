@@ -8,8 +8,8 @@
  *
  ******************************************************************************/
 
-#ifndef MXBL_CHAR_HEADER_
-#define MXBL_CHAR_HEADER_
+#ifndef BOOT_MXBL_MXBL_CHAR_H_
+#define BOOT_MXBL_MXBL_CHAR_H_
 
 #include "mxbl.h"
 
@@ -54,4 +54,4 @@ int  mxbl_chrdev_add(struct mxbl *mxbl);
  */
 void mxbl_chrdev_remove(struct mxbl *mxbl);
 
-#endif
+#endif /* BOOT_MXBL_MXBL_CHAR_H_ */
