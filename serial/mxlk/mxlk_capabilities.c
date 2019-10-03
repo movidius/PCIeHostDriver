@@ -2,7 +2,7 @@
  *
  * Intel Myriad-X PCIe Serial Driver: Device capability management
  *
- * Copyright (C) 2018 Intel Corporation
+ * Copyright (C) 2018 - 2019 Intel Corporation
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *

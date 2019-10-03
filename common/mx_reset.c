@@ -27,10 +27,37 @@
 #define MX_VENDOR_SPEC_DLLP     (0x704)
 #define MX_RESET_DEV            (0xDEADDEAD)
 
+int mx_reset_restore_and_check_device(struct mx_dev *mx_dev) {
+    /* Restore the device's context. */
+    mx_pci_dev_ctx_restore(mx_dev);
+
+    /* Re-enable the device. */
+    mx_pci_dev_enable(mx_dev);
+
+    /* Check that the MX device is back in boot mode.
+     * This implies setting MSI enable because the MX is waiting for this to
+     * complete part of its initialization process needed to be able to read
+     * MMIO space (and thus the operation mode). But the device will not start
+     * sending MSIs before other parts of its initialization sequence (implying
+     * other handshakes handled by higher layers) are completed. */
+    mx_pci_msi_set_enable(mx_dev, 1);
+    msleep(1);
+    if (mx_get_opmode(mx_dev) != MX_OPMODE_BOOT) {
+        return -EIO;
+    }
+
+    return 0;
+}
+
 int mx_reset_device(struct mx_dev *mx_dev) {
+    int error;
+
     /* Save the device's context because its PCIe controller will be reset in
      * the process. */
     mx_pci_dev_ctx_save(mx_dev);
+
+    /* Disable the device to put an end to all operations. */
+    mx_pci_dev_disable(mx_dev);
 
     /* Ensure there are no transactions pending. */
     mx_pci_wait_for_pending_transaction(mx_dev);
@@ -47,19 +74,10 @@ int mx_reset_device(struct mx_dev *mx_dev) {
         return -EIO;
     }
 
-    /* Restore the device's context. */
-    mx_pci_dev_ctx_restore(mx_dev);
-
-    /* Check that the MX device is back in boot mode.
-     * This implies setting MSI enable because the MX is waiting for this to
-     * complete part of its initialization process needed to be able to read
-     * MMIO space (and thus the operation mode). But the device will not start
-     * sending MSIs before other parts of its initialization sequence (implying
-     * other handshakes handled by higher layers) are completed. */
-    mx_pci_msi_set_enable(mx_dev, 1);
-    msleep(1);
-    if (mx_get_opmode(mx_dev) != MX_OPMODE_BOOT) {
-        return -EIO;
+    /* Restore the full PCI context and check the device is up and running. */
+    error = mx_reset_restore_and_check_device(mx_dev);
+    if (error) {
+        return error;
     }
 
     return 0;

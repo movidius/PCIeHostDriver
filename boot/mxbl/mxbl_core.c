@@ -137,6 +137,18 @@ int mxbl_core_init(struct mxbl *mxbl, struct pci_dev *pdev,
          mxbl_events_init(mxbl);
     }
 
+    /* In case the driver is unloaded and loaded again, the interrupt will not be triggered,
+       in such cases the loop below will kick in and add  */ 
+    if ( (mx_get_opmode(&mxbl->mx_dev) == MX_OPMODE_BOOT) && 
+         (!mxbl->chrdev_added) ){
+#ifdef EMBEDDED_BINARY
+        size_t length = sizeof(mxbl_boot_image);
+        mx_boot_load_image(&mxbl->mx_dev, mxbl_boot_image, length, false);
+#else
+        mxbl_chrdev_add(mxbl);
+#endif
+    }
+
     mxbl->unit = atomic_fetch_add(1, &units_found);
     if (mxbl->unit >= MXBL_MAX_DEVICES) {
         goto error_max_devices;

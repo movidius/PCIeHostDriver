@@ -2,7 +2,7 @@
  *
  * Intel Myriad-X PCIe Serial Driver: Character device infrastructure
  *
- * Copyright (C) 2018 Intel Corporation
+ * Copyright (C) 2018 - 2019 Intel Corporation
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
@@ -85,12 +85,15 @@ static unsigned int mxlk_dev_poll(struct file *filp,
     return mask;
 }
 
-
 static long mxlk_dev_ioctl(struct file *filp, unsigned int cmd,
                            unsigned long arg)
 {
     struct mxlk_interface *inf = priv_to_interface(filp);
     struct mxlk_boot_param boot_param;
+    enum mxlk_fw_status fw_status = MXLK_FW_STATUS_USER_APP;
+    char enumtoStr[][256] = {{"BOOTLOADER"},
+                             {"USER_APPLICATION"},
+                             {"UNKNOWN_STATE"}};
 
     switch (cmd) {
         case MXLK_RESET_DEV:
@@ -101,6 +104,11 @@ static long mxlk_dev_ioctl(struct file *filp, unsigned int cmd,
             copy_from_user(&boot_param, (char *)arg, sizeof(boot_param));
             return mxlk_core_boot_dev(inf->mxlk,
                                       boot_param.buffer, boot_param.length);
+        case MXLK_STATUS_DEV:
+            mxlk_get_dev_status(inf->mxlk, &fw_status);
+            mx_info("Device status %s\n", enumtoStr[(int)fw_status]);
+            copy_to_user((int*)arg, &fw_status, sizeof(fw_status));
+            return 0;
         default:
             mx_err("wrong ioctl command (0x%x)\n", cmd);
             return -EPERM;

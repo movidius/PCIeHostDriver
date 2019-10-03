@@ -2,7 +2,7 @@
  *
  * Intel Myriad-X PCIe Serial Driver: Main types and defines
  *
- * Copyright (C) 2018 Intel Corporation
+ * Copyright (C) 2018 - 2019 Intel Corporation
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
@@ -34,7 +34,7 @@
 
 #include "mxlk_common.h"
 
-#define MXLK_MAX_DEVICES    (1)
+#define MXLK_MAX_DEVICES    (8)
 #define MXLK_DRIVER_NAME    "mxlk"
 #define MXLK_DRIVER_DESC    "Intel(R) MyriadX PCIe xLink"
 #define MXLK_MAX_NAME_LEN   (32)
@@ -116,8 +116,6 @@ struct mxlk {
 
     struct cdev op_cdev;
     struct device *op_dev;
-
-    bool boot_ready;
 
     struct mxlk_interface interfaces[MXLK_NUM_INTERFACES];
 
