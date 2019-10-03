@@ -34,7 +34,7 @@
 #define MXBL_TO_PCI(mxbl) ((mxbl)->pci)
 #define MXBL_TO_DEV(mxbl) (&(mxbl)->pci->dev)
 
-#define MXBL_MAX_DEVICES 1
+#define MXBL_MAX_DEVICES 8
 
 /* Myriad-X Bootloader driver (MXBL) device instance control structure */
 struct mxbl {

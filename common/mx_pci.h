@@ -70,6 +70,20 @@ int mx_pci_irq_init(struct mx_dev *mx_dev, const char *drv_name,
 void mx_pci_irq_cleanup(struct mx_dev *mx_dev, void *drv_isr_data);
 
 /*
+ * @brief Enable the MX PCI device (bus master).
+ *
+ * @param[in] mx_dev - pointer to mx_dev instance.
+ */
+void mx_pci_dev_enable(struct mx_dev *mx_dev);
+
+/*
+ * @brief Disable the MX PCI device (bus master).
+ *
+ * @param[in] mx_dev - pointer to mx_dev instance.
+ */
+void mx_pci_dev_disable(struct mx_dev *mx_dev);
+
+/*
  * @brief Set/clear MSI enable bit.
  *
  * @param[in] mx_dev - pointer to mx_dev instance.
@@ -101,9 +115,7 @@ void mx_pci_wait_for_pending_transaction(struct mx_dev *mx_dev);
 /*
  * @brief Save the PCI device's context.
  *
- * NOTES:
- *  1. Typically, to be called before resetting the device.
- *  2. This function also disables the device (clears Bus Master Enable).
+ * NOTE: Typically, to be called before resetting the device.
  *
  * @param[in] mx_dev - pointer to mx_dev instance.
  */
@@ -112,9 +124,7 @@ void mx_pci_dev_ctx_save(struct mx_dev *mx_dev);
 /*
  * @brief Restore the PCI device's context.
  *
- * NOTES:
- *  1. Typically, to be called after resetting the device.
- *  2. This function also re-enables the device.
+ * NOTE: Typically, to be called after resetting the device.
  *
  * @param[in] mx_dev - pointer to mx_dev instance.
  */

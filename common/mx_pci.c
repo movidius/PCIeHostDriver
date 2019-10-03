@@ -130,6 +130,16 @@ void mx_pci_irq_cleanup(struct mx_dev *mx_dev, void *drv_isr_data)
     pci_free_irq_vectors(mx_dev->pci);
 }
 
+void mx_pci_dev_enable(struct mx_dev *mx_dev)
+{
+    pci_set_master(mx_dev->pci);
+}
+
+void mx_pci_dev_disable(struct mx_dev *mx_dev)
+{
+    pci_clear_master(mx_dev->pci);
+}
+
 void mx_pci_msi_set_enable(struct mx_dev *mx_dev, int enable)
 {
     int msi_ctrl_offset = mx_dev->pci->msi_cap + PCI_MSI_FLAGS;
@@ -143,7 +153,6 @@ void mx_pci_msi_set_enable(struct mx_dev *mx_dev, int enable)
     }
     pci_write_config_word(mx_dev->pci, msi_ctrl_offset, msi_ctrl);
 }
-
 
 void mx_pci_dev_lock(struct mx_dev *mx_dev) {
     pci_cfg_access_lock(mx_dev->pci);
@@ -162,11 +171,6 @@ void mx_pci_wait_for_pending_transaction(struct mx_dev *mx_dev) {
 void mx_pci_dev_ctx_save(struct mx_dev *mx_dev)
 {
     pci_save_state(mx_dev->pci);
-
-    /* Disable the device by clearing the command register, except for legacy
-     * interrupts that are disabled. As we saved the command register value
-     * before disabling, the device will be naturally re-enabled upon restoring. */
-    pci_write_config_word(mx_dev->pci, PCI_COMMAND, PCI_COMMAND_INTX_DISABLE);
 }
 
 void mx_pci_dev_ctx_restore(struct mx_dev *mx_dev)

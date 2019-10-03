@@ -2,7 +2,7 @@
  *
  * Intel Myriad-X PCIe Serial Driver: Data transfer engine
  *
- * Copyright (C) 2018 Intel Corporation
+ * Copyright (C) 2018 - 2019 Intel Corporation
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
@@ -18,14 +18,17 @@
 #include "mxlk_char.h"
 #include "mxlk_core.h"
 #include "mxlk_capabilities.h"
+#include "mxlk_ioctl.h"
 
-/*
- * doorbell parameters
- */
+/* Doorbell parameters. */
 #define MXLK_DOORBELL_ADDR (0xFF0)
 #define MXLK_DOORBELL_DATA (0x72696E67) /* "RING" */
 
 #define MXLK_CIRCULAR_INC(val, max) (((val) + 1) % (max))
+
+/* Used to avoid processing invalid head and tail pointers that we might read
+   when MX device resets itself. */
+#define INVALID(qptr) (qptr == 0xFFFFFFFF)
 
 static atomic_t units_found = ATOMIC_INIT(0);
 
@@ -642,10 +645,6 @@ static irqreturn_t mxlk_interrupt(int irq, void *args)
         mxlk_start_tx(mxlk);
         mxlk_start_rx(mxlk);
     } else if (opmode == MX_OPMODE_BOOT) {
-        u32 identity = mx_rd32(mxlk->mmio, MX_INT_IDENTITY);
-        if (field_get(MX_INT_STATUS_UPDATE, identity)) {
-            mxlk->boot_ready = true;
-        }
         mx_wr32(mxlk->mmio, MX_INT_IDENTITY, 0);
     } else {
         mx_err("Unexpected MSI interrupt in operation mode %d\n", opmode);
@@ -737,6 +736,12 @@ static void mxlk_rx_event_handler(struct work_struct *work)
     ndesc =  rx->pipe.ndesc;
     tail  = mxlk_get_tdr_tail(&rx->pipe);
     head  = mxlk_get_tdr_head(&rx->pipe);
+
+    /* Stop processing here in case MX device is down. */
+    if (INVALID(head) || INVALID(tail)) {
+        return;
+    }
+
     /* clean old entries first */
     while (head != tail) {
         td = rx->pipe.tdr + head;
@@ -812,11 +817,17 @@ static void mxlk_tx_event_handler(struct work_struct *work)
     tail  = mxlk_get_tdr_tail(&tx->pipe);
     head  = mxlk_get_tdr_head(&tx->pipe);
 
+    /* Stop processing here in case MX device is down. */
+    if (INVALID(head) || INVALID(tail)) {
+        return;
+    }
+
     /* clean old entries first */
     while (old != head) {
         dd = tx->ddr + old;
         td = tx->pipe.tdr + old;
         bd = dd->bd;
+
         status = mxlk_get_td_status(td);
         if (status != MXLK_DESC_STATUS_SUCCESS) {
             mx_err("detected tx desc failure (%u)\n", status);
@@ -904,8 +915,8 @@ int mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev,
 
     mxlk->unit = atomic_fetch_inc(&units_found);
     if (mxlk->unit < MXLK_MAX_DEVICES) {
-         scnprintf(mxlk->name, MXLK_MAX_NAME_LEN, MXLK_DRIVER_NAME"%d",
-                   mxlk->unit);
+        scnprintf(mxlk->name, MXLK_MAX_NAME_LEN, MXLK_DRIVER_NAME"%d",
+                  mxlk->unit);
     } else {
         return -EPERM;
     }
@@ -939,6 +950,10 @@ int mxlk_core_init(struct mxlk *mxlk, struct pci_dev *pdev,
             goto error_comms;
         }
     }
+
+    /* Save PCIe context now so that we have a base for restoring the link if
+     * the device ever resets itself. */
+    mx_pci_dev_ctx_save(&mxlk->mx_dev);
 
     return 0;
 
@@ -1147,11 +1162,22 @@ int mxlk_core_reset_dev(struct mxlk *mxlk)
 {
     int error;
     enum mx_opmode opmode;
+    bool need_reset = true;
 
     opmode = mx_get_opmode(&mxlk->mx_dev);
     if (opmode == MX_OPMODE_BOOT) {
         /* MX device has already been reset - nothing to do */
         return 0;
+    } else if (opmode == MX_OPMODE_UNKNOWN) {
+        /* Looks like device may have reset itself already.
+         * Perform post reset operations to see if we can resume proper
+         * communications. */
+        error = mx_reset_restore_and_check_device(&mxlk->mx_dev);
+        if (error) {
+            mx_err("Context restoring failed with error: %d\n", error);
+            return error;
+        }
+        need_reset = false;
     } else if (!MX_IS_OPMODE_APP(opmode)) {
         /* PCIe reset driver is not accessible... */
         return -EPERM;
@@ -1160,17 +1186,23 @@ int mxlk_core_reset_dev(struct mxlk *mxlk)
     mxlk_comms_cleanup(mxlk);
     mxlk_events_cleanup(mxlk);
 
-    mx_pci_dev_lock(&mxlk->mx_dev);
-    error = mx_reset_device(&mxlk->mx_dev);
-    mx_pci_dev_unlock(&mxlk->mx_dev);
-    if (error) {
-        return error;
+    if (need_reset) {
+        mx_pci_dev_lock(&mxlk->mx_dev);
+        error = mx_reset_device(&mxlk->mx_dev);
+        mx_pci_dev_unlock(&mxlk->mx_dev);
+        if (error) {
+            return error;
+        }
     }
 
     error = mxlk_events_init(mxlk);
     if (error) {
         return error;
     }
+
+    /* Kernel discards saved context after restoration so save it again now in
+     * order to be ready in case a device-initiated reset happens. */
+    mx_pci_dev_ctx_save(&mxlk->mx_dev);
 
     return 0;
 }
@@ -1182,7 +1214,7 @@ int mxlk_core_boot_dev(struct mxlk *mxlk, const char *buffer, size_t length)
 
     /* Make sure we are in the correct operational mode and the device is ready. */
     opmode = mx_get_opmode(&mxlk->mx_dev);
-    if ((opmode != MX_OPMODE_BOOT) || !mxlk->boot_ready) {
+    if (opmode != MX_OPMODE_BOOT) {
         return -EPERM;
     }
 
@@ -1192,8 +1224,6 @@ int mxlk_core_boot_dev(struct mxlk *mxlk, const char *buffer, size_t length)
     if (error < 0) {
         return error;
     }
-
-    mxlk->boot_ready = false;
 
     error = mxlk_events_init(mxlk);
     if (error) {
@@ -1211,4 +1241,33 @@ int mxlk_core_boot_dev(struct mxlk *mxlk, const char *buffer, size_t length)
     }
 
     return 0;
+}
+
+static char* convertOpModeToStr(const enum mx_opmode opmode) {
+    switch (opmode) {
+        case MX_OPMODE_UNKNOWN:     return "MX_OPMODE_UNKNOWN";
+        case MX_OPMODE_BOOT:        return "MX_OPMODE_BOOT";
+        case MX_OPMODE_LOADER:      return "MX_OPMODE_LOADER";
+        case MX_OPMODE_APP_VPUAL:   return "MX_OPMODE_APP_VPUAL";
+        case MX_OPMODE_APP_VPULINK: return "MX_OPMODE_APP_VPULINK";
+        default: return "";
+    }
+}
+
+void mxlk_get_dev_status(struct mxlk *mxlk, enum mxlk_fw_status *fw_status)
+{
+    enum mx_opmode opmode;
+
+    opmode = mx_get_opmode(&mxlk->mx_dev);
+    mx_info("Device opmode: %s\n", convertOpModeToStr(opmode));
+    if (opmode == MX_OPMODE_BOOT) {
+        /* Device in Boot mode */
+        *fw_status = MXLK_FW_STATE_BOOTLOADER;
+    } else if (opmode == MX_OPMODE_UNKNOWN) {
+        /* Device is lost or require configuration restoration */
+        *fw_status = MXLK_FW_STATUS_UNKNOWN_STATE;
+    } else {
+        /* In case of of all other modes, assumed myriad is running some mvcmd */
+        *fw_status = MXLK_FW_STATUS_USER_APP;
+    }
 }

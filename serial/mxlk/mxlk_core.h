@@ -2,7 +2,7 @@
  *
  * Intel Myriad-X PCIe Serial Driver: Data transfer engine API
  *
- * Copyright (C) 2018 Intel Corporation
+ * Copyright (C) 2018 - 2019 Intel Corporation
  *
  * SPDX-License-Identifier: GPL-2.0-only
  *
@@ -12,6 +12,7 @@
 #define SERIAL_MXLK_MXLK_CORE_H_
 
 #include "mxlk.h"
+#include "mxlk_ioctl.h"
 
 /*
  * @brief Initializes mxlk core component
@@ -127,5 +128,14 @@ int mxlk_core_reset_dev(struct mxlk *mxlk);
  *      <0 - linux error code
  */
 int mxlk_core_boot_dev(struct mxlk *mxlk, const char *buffer, size_t length);
+
+/*
+ * @brief Indicates if the MX device has booted or not
+ *
+ * @param[in] mxlk - pointer to mxlk instance
+ * @param[out] fw_status - status of the MX device
+ *
+ */
+void mxlk_get_dev_status(struct mxlk *mxlk, enum mxlk_fw_status *fw_status);
 
 #endif /* SERIAL_MXLK_MXLK_CORE_H_ */
