@@ -1259,7 +1259,7 @@ void mxlk_get_dev_status(struct mxlk *mxlk, enum mxlk_fw_status *fw_status)
     enum mx_opmode opmode;
 
     opmode = mx_get_opmode(&mxlk->mx_dev);
-    mx_info("Device opmode: %s\n", convertOpModeToStr(opmode));
+    mx_info("%s Device opmode: %s\n", mxlk->name, convertOpModeToStr(opmode));
     if (opmode == MX_OPMODE_BOOT) {
         /* Device in Boot mode */
         *fw_status = MXLK_FW_STATE_BOOTLOADER;

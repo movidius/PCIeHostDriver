@@ -182,5 +182,6 @@ bool mx_pci_dev_id_valid(struct mx_dev *mx_dev)
 {
     u32 vend_dev_id = 0;
     pci_read_config_dword(mx_dev->pci, PCI_VENDOR_ID, &vend_dev_id);
+    mx_info("vend_dev_id %x\n", vend_dev_id);
     return (vend_dev_id == (PCI_VENDOR_ID_INTEL | (MX_PCI_DEVICE_ID << 16)));
 }

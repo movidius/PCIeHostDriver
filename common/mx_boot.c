@@ -233,7 +233,10 @@ int mx_boot_load_image(struct mx_dev *mx_dev, const char *buffer, size_t length,
         }
 
         if (user_land_buffer) {
-            copy_from_user(image, usr_image, chunk_size);
+            if(copy_from_user(image, usr_image, chunk_size)) {
+                printk("failed to copy image from user \n");
+                goto error_failed_transfer;
+            }
         } else {
             memcpy(image, usr_image, chunk_size);
         }
