@@ -101,19 +101,13 @@ static long mxlk_dev_ioctl(struct file *filp, unsigned int cmd,
             return mxlk_core_reset_dev(inf->mxlk);
         case MXLK_BOOT_DEV:
             mx_info("loading image to MX device %s\n", inf->mxlk->name);
-            if(copy_from_user(&boot_param, (char *)arg, sizeof(boot_param))) {
-                printk("failed to copy boot_param from user space \n");
-                return -EFAULT;
-            }
+            copy_from_user(&boot_param, (char *)arg, sizeof(boot_param));
             return mxlk_core_boot_dev(inf->mxlk,
                                       boot_param.buffer, boot_param.length);
         case MXLK_STATUS_DEV:
             mxlk_get_dev_status(inf->mxlk, &fw_status);
-            mx_info("Device %s status %s\n", inf->mxlk->name, enumtoStr[(int)fw_status]);
-            if(copy_to_user((int*)arg, &fw_status, sizeof(fw_status))) {
-                printk("failed to copy status to user space \n");
-                return -EFAULT;
-            }
+            mx_info("Device status %s\n", enumtoStr[(int)fw_status]);
+            copy_to_user((int*)arg, &fw_status, sizeof(fw_status));
             return 0;
         default:
             mx_err("wrong ioctl command (0x%x)\n", cmd);
