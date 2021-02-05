@@ -788,7 +788,7 @@ static void mxlk_rx_event_handler(struct work_struct *work)
 
     if (mxlk_get_tdr_head(&rx->pipe) != head) {
         mxlk_set_tdr_head(&rx->pipe, head);
-        mmiowb();
+        wmb();
         mxlk_send_doorbell(mxlk);
     }
 
@@ -871,7 +871,6 @@ static void mxlk_tx_event_handler(struct work_struct *work)
     if (mxlk_get_tdr_tail(&tx->pipe) != tail) {
         mxlk_set_tdr_tail(&tx->pipe, tail);
         wmb();
-        mmiowb();
         mxlk_send_doorbell(mxlk);
     }
 
