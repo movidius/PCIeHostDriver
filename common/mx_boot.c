@@ -72,9 +72,6 @@ void mx_boot_status_update_int_disable(struct mx_dev *mx_dev)
 
 void mx_boot_init(struct mx_dev *mx_dev)
 {
-    /* Workaround for potential bus resets during enumeration process. */
-    enable_mx_rdma(mx_dev->pci);
-
     mutex_init(&mx_dev->transfer_lock);
 }
 
@@ -186,6 +183,10 @@ int mx_boot_load_image(struct mx_dev *mx_dev, const char *buffer, size_t length,
     struct kmem_cache *cachep;
     size_t bl_length;
     enum mx_opmode op_mode;
+
+    /* Workaround for potential bus resets during enumeration process or
+     * sleep/resume sequences */
+    enable_mx_rdma(mx_dev->pci);
 
     if (length > MAX_CONT_BUFFER_SIZE_LINUX) {
         /* If the buffer passed by the user is greater than 4MB, then need to
