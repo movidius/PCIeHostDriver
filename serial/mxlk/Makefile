@@ -10,6 +10,11 @@ mxlk-objs += mxlk_main.o \
 			 mxlk_char.o \
 			 mxlk_core.o
 
+NO_INFO ?= 0
+ifeq ($(NO_INFO), 1)
+    ccflags-y += -DNO_INFO
+endif
+
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 
@@ -23,9 +28,9 @@ install:
 
 help:
 	@echo ""
-	@echo "make all     -> builds driver"
-	@echo "make clean   -> delete build artifacts"
-	@echo "make install -> loads mxlk.ko"
+	@echo "make all [NO_INFO=1]  -> builds driver [with disabled info logs]"
+	@echo "make clean            -> delete build artifacts"
+	@echo "make install          -> loads mxlk.ko"
 	@echo ""
 
 TEST_HW_PLATFORM := ”HOST”
