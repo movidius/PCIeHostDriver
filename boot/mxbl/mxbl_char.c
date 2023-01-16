@@ -48,7 +48,10 @@ static ssize_t mxbl_dev_read(struct file *filp, char *buffer,
 
     mx_rd_buf(mxbl->mmio, MX_MAIN_MAGIC, main_magic, sizeof(main_magic));
     length = min(length, sizeof(main_magic));
-    copy_to_user(buffer, main_magic, length);
+    int error = copy_to_user(buffer, main_magic, length);
+    if (error) {
+        mx_err("failed to copy to user %d/%zu\n", error, length);
+    }
 
     return (ssize_t) length;
 }
