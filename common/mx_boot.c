@@ -13,6 +13,7 @@
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
+#include <linux/version.h>
 
 #include "mx_common.h"
 #include "mx_pci.h"
@@ -221,9 +222,16 @@ int mx_boot_load_image(struct mx_dev *mx_dev, const char *buffer, size_t length,
 
         /* In case of secondary loader, boot in case the last chunk */
         boot_now = (size_left - chunk_size) ? 0 : 1;
-
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,16,0)
         cachep = kmem_cache_create(MX_BOOT_OBJ_NAME, chunk_size,
                                    MX_DMA_ALIGNMENT, 0, NULL);
+#else
+        //since kernel 4.16 by default kmem_cache_create calls kmem_cache_create_usercopy
+        //with a 0 size for usercopy. In case Kernel is built with CONFIG_HARDENED_USERCOPY
+        //the firmware copy to kernel space will fail.
+        cachep = kmem_cache_create_usercopy(MX_BOOT_OBJ_NAME, chunk_size,
+                                           MX_DMA_ALIGNMENT, 0, 0, chunk_size, NULL);
+#endif
         if (!cachep) {
             goto error_failed_cache_create;
         }
@@ -234,7 +242,11 @@ int mx_boot_load_image(struct mx_dev *mx_dev, const char *buffer, size_t length,
         }
 
         if (user_land_buffer) {
-            copy_from_user(image, usr_image, chunk_size);
+            error = copy_from_user(image, usr_image, chunk_size);
+            if (error) {
+                mx_err("failed to copy from user %d/%zu\n", error, chunk_size);
+            }
+
         } else {
             memcpy(image, usr_image, chunk_size);
         }
